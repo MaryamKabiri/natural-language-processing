@@ -1,0 +1,139 @@
+---
+title: 'Capstone Project : Millestone Report'
+author: "Maryam Kabiri"
+date: "November 20, 2016"
+output: html_document
+---
+
+# Report Requirements
+
+The goal of this project is just to display that you've gotten used to working with the data and that you are on track to create your prediction algorithm. Please submit a report on R Pubs (http://rpubs.com/) that explains your exploratory analysis and your goals for the eventual app and algorithm. This document should be concise and explain only the major features of the data you have identified and briefly summarize your plans for creating the prediction algorithm and Shiny app in a way that would be understandable to a non-data scientist manager. You should make use of tables and plots to illustrate important summaries of the data set. The motivation for this project is to: 
+1. Demonstrate that you've downloaded the data and have successfully loaded it in.
+2. Create a basic report of summary statistics about the data sets.
+3. Report any interesting findings that you amassed so far.
+4. Get feedback on your plans for creating a prediction algorithm and Shiny app.
+
+# Download Data
+
+First, load the required libraries
+```{r, echo=T, message=F}
+library(qdap)
+library(ggplot2)
+library(stringi)
+library(quanteda)
+library(slam)
+```
+
+
+Then, load the three text file as lines 
+```{r, echo=T}
+setwd("C:/Users/Maryam/Desktop/Datascientists/Data science capstone/final/en_US")
+blogs<-readLines("en_US.blogs.txt")
+twitter<-readLines("en_US.twitter.txt")
+news<-readLines("en_US.news.txt", warn=T)
+```
+
+#Summary Statistics 
+
+Exploratory analysis
+```{r, echo=T}
+blog_size<- round(file.info("en_US.blogs.txt")$size*1e-6, 1)
+twitter_size<- round(file.info("en_US.twitter.txt")$size*1e-6, 1)
+news_size<- round(file.info("en_US.news.txt")$size*1e-6, 1)
+
+blogs_words<-sum(stri_count_words(blogs))
+twitter_words<-sum(stri_count_words(twitter))
+news_words<-sum(stri_count_words(news))
+
+blogs_gen<-stri_stats_general(blogs)
+twitter_gen<-stri_stats_general(twitter)
+news_gen<-stri_stats_general(news)
+
+table<- data.frame(source= c("Blogs", "Twitters", "News"),
+                   Words= c(blogs_words, twitter_words, news_words),
+                   Lines= c(blogs_gen[1], twitter_gen[1], news_gen[1]),
+                   Characters= c(blogs_gen[3], twitter_gen[3], news_gen[3]),
+                   Size= c(blog_size, twitter_size, news_size)
+)
+table 
+```
+
+# Text Analysis
+
+Sampeling and data cleaning:
+The datset is too big, 2% of each dataset has been used to make a sample data set. 
+
+```{r, echo=T}
+set.seed(1234)
+blogs_sample<- sample(blogs, length(blogs)*0.02, replace=F)
+twitter_sample<- sample(twitter, length(twitter)*0.02, replace=F)
+news_sample<- sample(news, length(news)*0.02, replace=F)
+data_sample<- c(blogs_sample, twitter_sample, news_sample)
+```
+```{r, echo=T}
+data_sample<- gsub("â", "'", data_sample)
+data_sample <- gsub(" #\\S*","", data_sample) 
+data_sample <- gsub("(f|ht)(tp)(s?)(://)(\\S*)", "", data_sample)  
+data_sample <- gsub("[^0-9A-Za-z///' ]", "", data_sample)  
+data_sample<- Trim(clean(data_sample))
+```
+
+I use quenteda package to analyse the frequency of words. The package compute a table mapping words and sentences using dfm. The stop words (i.e. words such as but, the, .) are ignored because they are anyway the most frequent in any text. Also, the words are stemmed, this means that there is no distinction between the diferent variations of words such as boy/boys or go/goes/went    
+Word Clouds of top 50 words ( the larger ones have higher frequency)
+```{r, echo=T, message=F}
+data_corpus<-corpus(data_sample)
+tkn<- tokenize(data_corpus, removeNumbers = T, removePunct = T, removeSeparators = T)
+tkn_dfm<- dfm(tkn, stem=T, ignoredFeatures = stopwords("english"))
+```
+
+Word Clouds of top 50 words, the larger words have higher frequency
+```{r, echo=T}
+plot(tkn_dfm, max.word=50, colors=brewer.pal(8, "Dark2"))
+```
+ 
+defining the frequencies of one-grams, two-grams, and three-grams:
+```{r, echo=T, message=F}
+tkn_dfm_1<- dfm(data_corpus, ngrams=1, verbose= T, concatenator=" ", stopwords=T)
+```
+```{r, echo=T, message=F}
+tkn_dfm_2<- dfm(data_corpus, ngrams=2, verbose= T, concatenator=" ", stopwords=T) 
+```
+```{r, echo=T, message=F}
+tkn_dfm_3<- dfm(data_corpus, ngrams=3, verbose= T, concatenator=" ", stopwords=T) 
+```
+```{r, echo=T}
+one_gram<-as.data.frame(as.matrix(docfreq(tkn_dfm_1)))
+two_gram<-as.data.frame(as.matrix(docfreq(tkn_dfm_2)))
+three_gram<-as.data.frame(as.matrix(docfreq(tkn_dfm_3)))
+```
+
+Histogram of top 30 one-grams
+```{r, echo=T}
+one_gram_sorted<-sort(rowSums(one_gram), decreasing=T)
+one_gram_table<-data.frame(Words=names(one_gram_sorted), Frequency=one_gram_sorted)
+one_gram_plot<-ggplot(within(one_gram_table[1:30, ], Words<-factor(Words, levels=Words)), aes(Words, Frequency))+
+  geom_bar(stat="identity", fill="green")+
+  ggtitle("Top 30 one-grams")+ theme(axis.text.x=element_text(angle=45, hjust=1))
+one_gram_plot
+```
+
+Histogram of top 30 one-grams
+```{r, echo=T}
+two_gram_sorted<-sort(rowSums(two_gram), decreasing=T)
+two_gram_table<-data.frame(Words=names(two_gram_sorted), Frequency=two_gram_sorted)
+two_gram_plot<-ggplot(within(two_gram_table[1:30, ], Words<-factor(Words, levels=Words)), aes(Words, Frequency))+
+  geom_bar(stat="identity", fill="green")+
+  ggtitle("Top 30 two-grams")+ theme(axis.text.x=element_text(angle=45, hjust=1))
+two_gram_plot
+```
+
+Histogram of top 30 one-grams
+```{r, echo=T}
+three_gram_sorted<-sort(rowSums(three_gram), decreasing=T)
+three_gram_table<-data.frame(Words=names(three_gram_sorted), Frequency=three_gram_sorted)
+three_gram_plot<-ggplot(within(three_gram_table[1:30, ], Words<-factor(Words, levels=Words)), aes(Words, Frequency))+
+  geom_bar(stat="identity", fill="green")+
+  ggtitle("Top 30 three-grams")+ theme(axis.text.x=element_text(angle=45, hjust=1))
+three_gram_plot
+```
+
